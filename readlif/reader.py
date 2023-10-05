@@ -96,7 +96,15 @@ class LifImage:
         self.settings = image_info["settings"]
         self.dims_bytes = image_info["dims_bytes"]
         self.channel_bytes = image_info["channels_bytes"]
-        self.bpp = self.bit_depth / 8
+
+        dims_bytes_list = list(image_info["dims_bytes"].values())
+        if min(self.channel_bytes) == 0:
+            self.bpp = min(dims_bytes_list)
+        else:
+            if min(dims_bytes_list) == 0:
+                self.bpp = min(self.channel_bytes)
+            else:
+                raise ValueError(f"cannot determine number of bytes per pixel")
 
     def __repr__(self):
         return repr('LifImage object with dimensions: ' + str(self.dims))

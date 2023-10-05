@@ -252,62 +252,52 @@ class LifImage:
             image.seek(self.offsets[0])
             data = bytes()
 
-            # This code is here for future flexibility, to define a range to return
-            display_x = range(0, self.dims_n[display_dims[0]])
-            display_y = range(0, self.dims_n[display_dims[1]])
+            max_off_x = self.dims_bytes[display_dims[0]] * self.dims_n[display_dims[0]]
+            increment_x = self.dims_bytes[display_dims[0]]
+            display_x = range(0, max_off_x, increment_x)
+            max_off_y = self.dims_bytes[display_dims[1]] * self.dims_n[display_dims[1]]
+            increment_y = self.dims_bytes[display_dims[1]]
+            display_y = range(0, max_off_y, increment_y)
 
-            dim_len = [self.dims_n[i] for i in self.dims_n.keys()]  # For calculations below - list of dimension lengths
-            key_idx = range(0, len(dim_len))  # For calculations below
-
-            # Note, this does not include the first dim, need to index i - 1 later
-            precalc_dim_prod = tuple([reduce(lambda x, y: x * y, dim_len[:i])
-                                      for i in key_idx if len(dim_len[:i]) > 0])
-
-            # Define the size of the plane to return
-            total_len = self.dims_n[display_dims[0]] * self.dims_n[display_dims[1]]
-            channel_offset = c * total_len
+            # go to starting position for the channel and requested_dims based on the bytes offset from lif metadata
+            start_pos = 0
+            for key in requested_dims.keys():
+                start_pos += self.dims_bytes.get(key, 0) * requested_dims[key]
+            start_pos += self.channel_bytes[c]
 
             # Speedup for the common case where the display_dims are the first two dims
-            if display_dims == self.display_dims:
-                px_pos = 0
-                px_pos += channel_offset
-                for key, i in zip(self.dims_n.keys(), key_idx):
-                    # Multiply requested n by the length of all dims < than n
-                    remaining_dims = dim_len[:i]
+            #  i.e. reading the number of image pixels times the number of bytes per pixel gives us the correct data
+            contains_bpp = self.dims_bytes[display_dims[0]] == self.bpp
+            contains_bpp_times_other = self.dims_bytes[display_dims[0]] == self.bpp * self.dims_bytes[display_dims[1]]
 
-                    if len(remaining_dims) > 0:
-                        px_pos += requested_dims[key] * precalc_dim_prod[i - 1] * self.channels
-                    else:
-                        px_pos += requested_dims[key] * self.channels
-
+            if contains_bpp and contains_bpp_times_other:
+                # Define the size of the plane to return
+                read_len = self.dims_n[display_dims[0]] * self.dims_n[display_dims[1]] * self.bpp
                 if self.offsets[1] == 0:
-                    data = data + b"\00" * total_len
+                    data = data + b"\00" * read_len
                 else:
-                    image.seek(self.offsets[0] + px_pos)
-                    data = data + image.read(total_len)
+                    image.seek(self.offsets[0] + start_pos)
+                    data = data + image.read(read_len)
+            elif contains_bpp:
+                read_len = self.dims_n[display_dims[0]] * self.bpp
 
+                for pos in display_y:
+                    px_pos = start_pos + pos
+                    if self.offsets[1] == 0:
+                        data = data + b"\00" * read_len
+                    else:
+                        image.seek(self.offsets[0] + px_pos)
+                        data = data + image.read(read_len)
             # Handle the less common case, where the display_dims are arbitrary
             else:
-                # Todo: Fix channel offset problems
                 for pos_y in display_y:
                     for pos_x in display_x:
-                        px_pos = 0  # Reset position on every loop
-                        px_pos += channel_offset
-
-                        requested_dims[display_dims[0]] = pos_x
-                        requested_dims[display_dims[1]] = pos_y
-                        for key, i in zip(self.dims_n.keys(), key_idx):
-                            # Multiply requested n dims by the length of all dims below n in the hierarchy
-                            remaining_dims = dim_len[:i]
-                            if len(remaining_dims) > 0:
-                                px_pos += requested_dims[key] * precalc_dim_prod[i - 1] * self.channels
-                            else:
-                                px_pos += requested_dims[key] * self.channels
+                        px_pos = start_pos + pos_x + pos_y
                         if self.offsets[1] == 0:
                             data = data + b"\00" * 1
                         else:
                             image.seek(self.offsets[0] + px_pos)
-                            data = data + image.read(1)
+                            data = data + image.read(self.bpp)
 
         # LIF files can be either 8-bit of 16-bit.
         # Because of how the image is read in, all of the raw

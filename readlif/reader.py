@@ -613,6 +613,10 @@ class LifFile:
                 dims_dict = {int(d.attrib["DimID"]):
                              int(d.attrib["NumberOfElements"])
                              for d in dims}
+                
+                dims_bytes = {int(d.attrib["DimID"]):
+                              int(d.attrib["BytesInc"])
+                              for d in dims}
 
                 # Get the scale from each image
                 scale_dict = {}
@@ -682,6 +686,7 @@ class LifFile:
                 channel_list = item.findall(
                     "./Data/Image/ImageDescription/Channels/ChannelDescription"
                 )
+                channels_bytes = [int(c.attrib["BytesInc"]) for c in channel_list]
                 n_channels = int(len(channel_list))
                 # Iterate over each channel, get the resolution
                 bit_depth = tuple([int(c.attrib["Resolution"]) for
@@ -717,8 +722,9 @@ class LifFile:
                     "scale": (scale_x, scale_y, scale_z, scale_t),
                     "bit_depth": bit_depth,
                     "mosaic_position": m_pos_list,
-                    "channel_as_second_dim": channel_as_second_dim,
-                    "settings": settings
+                    "settings": settings,
+                    "dims_bytes": dims_bytes,
+                    "channels_bytes": channels_bytes
                     # "metadata_xml": item
                 }
 

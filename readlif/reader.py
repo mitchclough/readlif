@@ -224,6 +224,10 @@ class LifImage:
         for i in range(1, 11):
             requested_dims[i] = int(requested_dims.get(i, 0))
 
+        if c + 1 > self.channels:
+            raise ValueError(f"Requested Channel {str(c)}"
+                             f"but image only has {str(self.channels)} channels")
+
         # Check if any of the dims exceeds what is in the image
         for i in self.dims_n.keys():
             if (requested_dims[i] + 1) > self.dims_n.get(i, 0):

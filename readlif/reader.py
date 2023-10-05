@@ -96,6 +96,8 @@ class LifImage:
         self.n_mosaic = int(image_info["dims"].m)
         self.channel_as_second_dim = bool(image_info["channel_as_second_dim"])
         self.settings = image_info["settings"]
+        self.dims_bytes = image_info["dims_bytes"]
+        self.channel_bytes = image_info["channels_bytes"]
 
     def __repr__(self):
         return repr('LifImage object with dimensions: ' + str(self.dims))

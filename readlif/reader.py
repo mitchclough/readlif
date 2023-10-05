@@ -245,58 +245,60 @@ class LifImage:
                 f"not {type(self.filename)}"
             )
 
-        # Read the specified data into the buffer
-        with open(self.filename, "rb") as image:
-            # Start at the beginning of the specified image
-            image.seek(self.offsets[0])
-            data = bytes()
+        # Start at the beginning of the specified image
+        image.seek(self.offsets[0])
+        data = bytes()
 
-            max_off_x = self.dims_bytes[display_dims[0]] * self.dims_n[display_dims[0]]
-            increment_x = self.dims_bytes[display_dims[0]]
-            display_x = range(0, max_off_x, increment_x)
-            max_off_y = self.dims_bytes[display_dims[1]] * self.dims_n[display_dims[1]]
-            increment_y = self.dims_bytes[display_dims[1]]
-            display_y = range(0, max_off_y, increment_y)
+        max_off_x = self.dims_bytes[display_dims[0]] * self.dims_n[display_dims[0]]
+        increment_x = self.dims_bytes[display_dims[0]]
+        display_x = range(0, max_off_x, increment_x)
+        max_off_y = self.dims_bytes[display_dims[1]] * self.dims_n[display_dims[1]]
+        increment_y = self.dims_bytes[display_dims[1]]
+        display_y = range(0, max_off_y, increment_y)
 
-            # go to starting position for the channel and requested_dims based on the bytes offset from lif metadata
-            start_pos = 0
-            for key in requested_dims.keys():
-                start_pos += self.dims_bytes.get(key, 0) * requested_dims[key]
-            start_pos += self.channel_bytes[c]
+        # go to starting position for the channel and requested_dims based on the bytes offset from lif metadata
+        start_pos = 0
+        for key in requested_dims.keys():
+            start_pos += self.dims_bytes.get(key, 0) * requested_dims[key]
+        start_pos += self.channel_bytes[c]
 
-            # Speedup for the common case where the display_dims are the first two dims
-            #  i.e. reading the number of image pixels times the number of bytes per pixel gives us the correct data
-            contains_bpp = self.dims_bytes[display_dims[0]] == self.bpp
-            contains_bpp_times_other = self.dims_bytes[display_dims[0]] == self.bpp * self.dims_bytes[display_dims[1]]
+        # Speedup for the common case where the display_dims are the first two dims
+        #  i.e. reading the number of image pixels times the number of bytes per pixel gives us the correct data
+        contains_bpp = self.dims_bytes[display_dims[0]] == self.bpp
+        contains_bpp_times_other = self.dims_bytes[display_dims[0]] == self.bpp * self.dims_bytes[display_dims[1]]
+        # Quickest case where we can just read bpp * nx * ny bytes from the file and get our image
+        if contains_bpp and contains_bpp_times_other:
+            # Define the size of the plane to return
+            read_len = self.dims_n[display_dims[0]] * self.dims_n[display_dims[1]] * self.bpp
+            if self.offsets[1] == 0:
+                data = data + b"\00" * read_len
+            else:
+                image.seek(self.offsets[0] + start_pos)
+                data = data + image.read(read_len)
+        # Quicker case where we can't read the whole image at once but can read in one line at a time
+        elif contains_bpp:
+            read_len = self.dims_n[display_dims[0]] * self.bpp
 
-            if contains_bpp and contains_bpp_times_other:
-                # Define the size of the plane to return
-                read_len = self.dims_n[display_dims[0]] * self.dims_n[display_dims[1]] * self.bpp
+            for pos in display_y:
+                px_pos = start_pos + pos
                 if self.offsets[1] == 0:
                     data = data + b"\00" * read_len
                 else:
-                    image.seek(self.offsets[0] + start_pos)
+                    image.seek(self.offsets[0] + px_pos)
                     data = data + image.read(read_len)
-            elif contains_bpp:
-                read_len = self.dims_n[display_dims[0]] * self.bpp
-
-                for pos in display_y:
-                    px_pos = start_pos + pos
+        # Handle the less common case, where the display_dims are arbitrary
+        else:
+            for pos_y in display_y:
+                for pos_x in display_x:
+                    px_pos = start_pos + pos_x + pos_y
                     if self.offsets[1] == 0:
-                        data = data + b"\00" * read_len
+                        data = data + b"\00" * 1
                     else:
                         image.seek(self.offsets[0] + px_pos)
-                        data = data + image.read(read_len)
-            # Handle the less common case, where the display_dims are arbitrary
-            else:
-                for pos_y in display_y:
-                    for pos_x in display_x:
-                        px_pos = start_pos + pos_x + pos_y
-                        if self.offsets[1] == 0:
-                            data = data + b"\00" * 1
-                        else:
-                            image.seek(self.offsets[0] + px_pos)
-                            data = data + image.read(self.bpp)
+                        data = data + image.read(self.bpp)
+
+        if isinstance(self.filename, (str, bytes, os.PathLike)):
+            image.close()
 
         # LIF files can be either 8-bit of 16-bit.
         # Because of how the image is read in, all of the raw

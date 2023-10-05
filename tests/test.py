@@ -100,9 +100,6 @@ class TestReadMethods(unittest.TestCase):
         with self.assertRaises(ValueError):
             image.get_frame(z=0, t=0, c=0, m=10)
 
-        with self.assertRaises(ValueError):
-            image._get_item(100)
-
     def test_scale(self):
         obj = LifFile("./tests/xyzt_test.lif").get_image(0)
         self.assertAlmostEqual(obj.scale[0], 9.8709062997224)

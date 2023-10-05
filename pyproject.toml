@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "readlif"
+version = "0.6.6"
+description = "Fast Leica LIF file reader written in python"
+readme = "README.md"
+urls = {Homepage = "https://github.com/nimne/readlif"}
+authors = [{name = "Nick Negretti", email = "nick.negretti@gmail.com"}]
+license = {file = "LICENSE"}
+classifiers = [
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3",
+]
+dependencies = ["Pillow >= 7.2.0"]

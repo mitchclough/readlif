@@ -229,9 +229,10 @@ class LifImage:
                              f"but image only has {str(self.channels)} channels")
 
         # Check if any of the dims exceeds what is in the image
-        for i in self.dims_n.keys():
-            if (requested_dims[i] + 1) > self.dims_n.get(i, 0):
-                raise ValueError(f"Requested frame in dimension {str(i)} "
+        for key in requested_dims.keys():
+            if requested_dims[key] != 0:
+                if self.dims_n.get(key) is None or requested_dims[key] > self.dims_n[key]:
+                    raise ValueError(f"Requested frame in dimension {str(key)} "
                                  f"doesn't exist")
 
         if isinstance(self.filename, (str, bytes, os.PathLike)):

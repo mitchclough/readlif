@@ -217,7 +217,7 @@ class LifImage:
                 for pos_x in display_x:
                     px_pos = start_pos + pos_x + pos_y
                     if self.offsets[1] == 0:
-                        data = data + b"\00" * 1
+                        data = data + b"\00" * self.bpp
                     else:
                         image.seek(self.offsets[0] + px_pos)
                         data = data + image.read(self.bpp)

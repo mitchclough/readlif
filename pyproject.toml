@@ -1,17 +1,66 @@
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools", "setuptools_scm >= 8"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "readlif"
-version = "0.6.6"
+dynamic = ["version"]
 description = "Fast Leica LIF file reader written in python"
 readme = "README.md"
-urls = {Homepage = "https://github.com/nimne/readlif"}
-authors = [{name = "Nick Negretti", email = "nick.negretti@gmail.com"}]
-license = {file = "LICENSE"}
+urls = { Homepage = "https://github.com/nimne/readlif" }
+authors = [
+  { name = "Nick Negretti", email = "nick.negretti@gmail.com" },
+  { name = "Mitchell Clough", email = "m.clough@prisma-tx.com" },
+]
+license = { file = "LICENSE" }
 classifiers = [
-    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
-    "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+  "Programming Language :: Python :: 3",
 ]
 dependencies = ["Pillow >= 7.2.0"]
+
+[project.optional-dependencies]
+docs = ["sphinx", "sphinxcontrib-apidoc", "sphinx-rtd-theme"]
+dev = ["ruff", "mypy"]
+
+[tool.setuptools_scm]
+
+[tool.cibuildwheel]
+skip = ["*i686", "*win32", "pp*", "*musllinux*"]
+build-frontend = "build"
+test-extras = ["tests"]
+test-command = "python -m unittest discover {project}"
+
+[tool.ruff.lint]
+extend-select = [
+  "B",    # flake8-bugbear
+  "I",    # isort
+  "ARG",  # flake8-unused-arguments
+  "C4",   # flake8-comprehensions
+  "EM",   # flake8-errmsg
+  "ICN",  # flake8-import-conventions
+  "G",    # flake8-logging-format
+  "PGH",  # pygrep-hooks
+  "PIE",  # flake8-pie
+  "PL",   # pylint
+  "RET",  # flake8-return
+  "RUF",  # Ruff-specific
+  "SIM",  # flake8-simplify
+  "T20",  # flake8-print
+  "UP",   # pyupgrade
+  "YTT",  # flake8-2020
+  "EXE",  # flake8-executable
+  "NPY",  # NumPy specific rules
+  "PD",   # pandas-vet
+  "E501", # line length
+]
+ignore = [
+  "PLR09",   # Too many <...>
+  "PLR2004", # Magic value used in comparison
+  "ISC001",  # Conflicts with formatter
+]
+isort.required-imports = ["from __future__ import annotations"]
+
+[tool.mypy]
+packages = ["readlif"]
+warn_return_any = true

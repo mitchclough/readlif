@@ -1,13 +1,20 @@
+# Dev tool cache folders
+.mypy_cache/
+.ruff_cache/
+
 # Ignore build directories
 build/
 dist/
+wheelhouse/
 
 # Ignore Sphinx doc build
 docs/_build/
 
-# Ignore IntelliJ IDEA directory and project files
+# Ignore IDE directory and project files
 .idea
 *.iml
+.vscode
+.vs
 
 *.sync
 #Ignore these hidden files from Mac OS X
@@ -16,11 +23,11 @@ docs/_build/
 #Ignore dir created during install
 readlif.egg-info
 
-#Ignore all compiled python files (e.g. from running the unit tests):
-*.pyc
-*.pyo
-*.py{}
-*.py-e
+#Ignore all compiled python files (e.g. from running the unit tests)
+*.so
+__pycache__/
+*.py[cod]
+*$py.class
 
 #Ignore testing files
 ignore.py

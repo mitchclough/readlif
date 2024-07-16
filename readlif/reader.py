@@ -294,7 +294,7 @@ class LifImage:
                 data,
             )
 
-        msg = "Unknown bit-depth, please submit a bug report" " on Github"
+        msg = "Unknown bit-depth, please submit a bug report on Github"
         raise ValueError(msg)
 
     def get_frame(self, z: int = 0, t: int = 0, c: int = 0, m: int = 0) -> Image.Image:

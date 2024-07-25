@@ -15,6 +15,7 @@ def read_u64(handle: io.BufferedReader) -> int:
     (long_data,) = struct.unpack("Q", handle.read(8))
 
     if not isinstance(long_data, int):
+        handle.close()
         msg = "Unable to read a long int from the file"
         raise ValueError(msg)
 
@@ -26,6 +27,7 @@ def read_u32(handle: io.BufferedReader) -> int:
     (int_data,) = struct.unpack("I", handle.read(4))
 
     if not isinstance(int_data, int):
+        handle.close()
         msg = "Unable to read an int from the file"
         raise ValueError(msg)
 
@@ -48,11 +50,10 @@ def check_magic(handle: io.BufferedReader, bool_return: bool = False) -> bool:
         return True
 
     if not bool_return:
+        curr_pos = handle.tell()
         handle.close()
-        raise ValueError(
-            "This is probably not a LIF file. "
-            "Expected LIF magic byte at " + str(handle.tell())
-        )
+        msg = f"This is probably not a LIF file. Expected LIF magic byte at {curr_pos}"
+        raise ValueError(msg)
 
     return False
 
@@ -63,7 +64,10 @@ def check_mem(handle: io.BufferedReader, bool_return: bool = False) -> bool:
         return True
 
     if not bool_return:
-        raise ValueError("Expected LIF memory byte at " + str(handle.tell()))
+        curr_pos = handle.tell()
+        handle.close()
+        msg = f"Expected LIF memory byte at {curr_pos}"
+        raise ValueError(msg)
 
     return False
 

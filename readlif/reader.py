@@ -121,22 +121,14 @@ class Dims(NamedTuple, Generic[T]):
         return Dims(x=x, y=y, z=z, t=t, wl_em=wl_em, wl_ex=wl_ex, m=m)
 
 
-U = TypeVar("U", int, float)
-
-
-class Pos(NamedTuple, Generic[U]):
-    x: U
-    y: U
-
-
 class Tile(NamedTuple):
     """
     Class with positions for a mosaic tile.
     """
 
-    field: Pos[int]
+    field: tuple[int, int]
     """(x, y) field index"""
-    pos: Pos[float]
+    pos: tuple[float, float]
     """(x, y) tile position"""
 
 
@@ -652,7 +644,7 @@ class LifFile:
                             PosY = float(tile.get("PosY", 0))
 
                             tile_list.append(
-                                Tile(field=Pos(FieldX, FieldY), pos=Pos(PosX, PosY))
+                                Tile(field=(FieldX, FieldY), pos=(PosX, PosY))
                             )
 
                     settings_list = item.find(

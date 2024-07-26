@@ -24,4 +24,16 @@ def get_xml(filename: FileDescriptorOrPath) -> ET.Element:
         return ET.fromstring(xml_header)
 
 
-# Todo: dump_lif('outdir') function
+def dump_xml(filename: FileDescriptorOrPath, output_filename: FileDescriptorOrPath):
+    """
+    Given a lif file, outputs an XML file containing the file's metadata.
+
+    This is useful for debugging.
+
+    Args:
+        filename: what file to open?
+        output_filename: path to the XML file to be created. will overwrite an existing
+            file with the same name
+    """
+    xml_root = get_xml(filename)
+    ET.ElementTree(xml_root).write(output_filename, encoding="utf-16")

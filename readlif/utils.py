@@ -12,7 +12,7 @@ def get_xml(filename: FileDescriptorOrPath) -> ET.Element:
     This is useful for debugging.
 
     Args:
-        filename (FileDescriptorOrPath): what file to open?
+        filename: what file to open?
     """
     with open(filename, "rb") as f:
         check_magic(f)  # read 4 byte, check for magic bytes

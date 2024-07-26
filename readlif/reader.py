@@ -6,7 +6,7 @@ import warnings
 import xml.etree.ElementTree as ET
 from collections.abc import Generator
 from itertools import compress
-from typing import Any, Generic, NamedTuple, TypeAlias, TypeVar
+from typing import Any, Generic, Literal, NamedTuple, TypeAlias, TypeVar
 
 from PIL import Image
 
@@ -537,38 +537,12 @@ class LifFile:
         >>>     plane = img_0.get_plane(requested_dims = {4: i})
     """
 
-    def _recursive_memblock_is_image(
-        self, tree: ET.Element, return_list: list[bool] | None = None
-    ) -> list[bool]:
-        """Creates list of TRUE or FALSE if memblock is image"""
-
-        if return_list is None:
-            return_list = []
-
-        children = tree.findall("./Children/Element")
-        if len(children) < 1:  # Fix for 'first round'
-            children = tree.findall("./Element")
-        for item in children:
-            has_sub_children = len(item.findall("./Children/Element/Data")) > 0
-            is_image = len(item.findall("./Data/Image")) > 0
-
-            # Check to see if the Memblock idnetified in the XML actually has a size,
-            # otherwise it won't have an offset
-            memory_element = item.find("./Memory")
-            if memory_element is not None and int(memory_element.get("Size", 0)) > 0:
-                return_list.append(is_image)
-
-            if has_sub_children:
-                self._recursive_memblock_is_image(item, return_list)
-
-        return return_list
-
     def _recursive_image_find(
         self,
         tree: ET.Element,
-        return_list: list[ImageInfo] | None = None,
+        return_list: list[ImageInfo | Literal[False]] | None = None,
         path: str = "",
-    ) -> list[ImageInfo]:
+    ) -> list[ImageInfo | Literal[False]]:
         """Creates list of images by parsing the XML header recursively"""
 
         if return_list is None:
@@ -586,112 +560,121 @@ class LifFile:
 
             is_image = len(item.findall("./Data/Image")) > 0
 
-            if is_image:
-                # If additional XML data extraction is needed, add it here.
+            # Check to see if the Memblock idnetified in the XML actually has a size,
+            # otherwise it won't have an offset
+            memory_element = item.find("./Memory")
+            if memory_element is None:
+                msg = "No memory element was found in the XML metadata"
+                raise ValueError(msg)
+            if int(memory_element.get("Size", 0)) > 0:
+                if is_image:
+                    # If additional XML data extraction is needed, add it here.
 
-                # Find the dimensions, get them in order
-                dims = item.findall("./Data/Image/ImageDescription/" "Dimensions/")
+                    # Find the dimensions, get them in order
+                    dims = item.findall("./Data/Image/ImageDescription/" "Dimensions/")
 
-                dims_dict: dict[int, int] = {}
-                dims_bytes: dict[int, int] = {}
-                dims_scale: dict[int, float] = {}
-                for d in dims:
-                    dim_id = int(d.get("DimID", 0))
-                    dims_dict[dim_id] = int(d.get("NumberOfElements", 0))
-                    dims_bytes[dim_id] = int(d.get("BytesInc", -1))
-                    dim_len = float(d.get("Length", 0))
-                    if dim_len > 0:
-                        dims_scale[dim_id] = (dims_dict[dim_id] - 1) / dim_len
-                    else:
-                        dims_scale[dim_id] = 0
+                    dims_dict: dict[int, int] = {}
+                    dims_bytes: dict[int, int] = {}
+                    dims_scale: dict[int, float] = {}
+                    for d in dims:
+                        dim_id = int(d.get("DimID", 0))
+                        dims_dict[dim_id] = int(d.get("NumberOfElements", 0))
+                        dims_bytes[dim_id] = int(d.get("BytesInc", -1))
+                        dim_len = float(d.get("Length", 0))
+                        if dim_len > 0:
+                            dims_scale[dim_id] = (dims_dict[dim_id] - 1) / dim_len
+                        else:
+                            dims_scale[dim_id] = 0
 
-                # Known LIF dims:
-                # 1: x
-                # 2: y
-                # 3: z
-                # 4: t
-                # 5: detection wavelength
-                # 6: Unknown
-                # 7: Unknown
-                # 8: Unknown
-                # 9: illumination wavelength
-                # 10: Mosaic tile
-                dim_sizes = Dims.make_int(
-                    x=dims_dict.get(1, 0),
-                    y=dims_dict.get(2, 0),
-                    z=dims_dict.get(3, 0),
-                    t=dims_dict.get(4, 0),
-                    wl_em=dims_dict.get(5, 0),
-                    wl_ex=dims_dict.get(9, 0),
-                    m=dims_dict.get(10, 0),
-                )
+                    # Known LIF dims:
+                    # 1: x
+                    # 2: y
+                    # 3: z
+                    # 4: t
+                    # 5: detection wavelength
+                    # 6: Unknown
+                    # 7: Unknown
+                    # 8: Unknown
+                    # 9: illumination wavelength
+                    # 10: Mosaic tile
+                    dim_sizes = Dims.make_int(
+                        x=dims_dict.get(1, 0),
+                        y=dims_dict.get(2, 0),
+                        z=dims_dict.get(3, 0),
+                        t=dims_dict.get(4, 0),
+                        wl_em=dims_dict.get(5, 0),
+                        wl_ex=dims_dict.get(9, 0),
+                        m=dims_dict.get(10, 0),
+                    )
 
-                dim_byte_incs = Dims.make_int(
-                    x=dims_bytes.get(1, -1),
-                    y=dims_bytes.get(2, -1),
-                    z=dims_bytes.get(3, -1),
-                    t=dims_bytes.get(4, -1),
-                    wl_em=dims_bytes.get(5, -1),
-                    wl_ex=dims_bytes.get(9, -1),
-                    m=dims_bytes.get(10, -1),
-                )
+                    dim_byte_incs = Dims.make_int(
+                        x=dims_bytes.get(1, -1),
+                        y=dims_bytes.get(2, -1),
+                        z=dims_bytes.get(3, -1),
+                        t=dims_bytes.get(4, -1),
+                        wl_em=dims_bytes.get(5, -1),
+                        wl_ex=dims_bytes.get(9, -1),
+                        m=dims_bytes.get(10, -1),
+                    )
 
-                dim_scales = Dims.make_float(
-                    x=dims_scale.get(1, 0.0),
-                    y=dims_scale.get(2, 0.0),
-                    z=dims_scale.get(3, 0.0),
-                    t=dims_scale.get(4, 0.0),
-                    wl_em=dims_scale.get(5, 0.0),
-                    wl_ex=dims_scale.get(9, 0.0),
-                    m=dims_scale.get(10, 0.0),
-                )
+                    dim_scales = Dims.make_float(
+                        x=dims_scale.get(1, 0.0),
+                        y=dims_scale.get(2, 0.0),
+                        z=dims_scale.get(3, 0.0),
+                        t=dims_scale.get(4, 0.0),
+                        wl_em=dims_scale.get(5, 0.0),
+                        wl_ex=dims_scale.get(9, 0.0),
+                        m=dims_scale.get(10, 0.0),
+                    )
 
-                # Determine number of channels
-                channel_list = item.findall(
-                    "./Data/Image/ImageDescription/Channels/ChannelDescription"
-                )
-                chan_byte_incs = [int(c.get("BytesInc", -1)) for c in channel_list]
-                n_channels = int(len(channel_list))
-                # Iterate over each channel, get the resolution
-                chan_bit_depths = tuple(
-                    int(c.get("Resolution", 0)) for c in channel_list
-                )
+                    # Determine number of channels
+                    channel_list = item.findall(
+                        "./Data/Image/ImageDescription/Channels/ChannelDescription"
+                    )
+                    chan_byte_incs = [int(c.get("BytesInc", -1)) for c in channel_list]
+                    n_channels = int(len(channel_list))
+                    # Iterate over each channel, get the resolution
+                    chan_bit_depths = tuple(
+                        int(c.get("Resolution", 0)) for c in channel_list
+                    )
 
-                # Get the position data if the image is tiled
-                tile_list: list[Tile] = []
-                if dim_sizes.m > 1:
-                    for tile in item.findall("./Data/Image/Attachment/Tile"):
-                        FieldX = int(tile.get("FieldX", 0))
-                        FieldY = int(tile.get("FieldY", 0))
-                        PosX = float(tile.get("PosX", 0))
-                        PosY = float(tile.get("PosY", 0))
+                    # Get the position data if the image is tiled
+                    tile_list: list[Tile] = []
+                    if dim_sizes.m > 1:
+                        for tile in item.findall("./Data/Image/Attachment/Tile"):
+                            FieldX = int(tile.get("FieldX", 0))
+                            FieldY = int(tile.get("FieldY", 0))
+                            PosX = float(tile.get("PosX", 0))
+                            PosY = float(tile.get("PosY", 0))
 
-                        tile_list.append(
-                            Tile(field=Pos(FieldX, FieldY), pos=Pos(PosX, PosY))
-                        )
+                            tile_list.append(
+                                Tile(field=Pos(FieldX, FieldY), pos=Pos(PosX, PosY))
+                            )
 
-                settings_list = item.find(
-                    "./Data/Image/Attachment/ATLConfocalSettingDefinition"
-                )
-                settings = settings_list.attrib if settings_list is not None else {}
+                    settings_list = item.find(
+                        "./Data/Image/Attachment/ATLConfocalSettingDefinition"
+                    )
+                    settings = settings_list.attrib if settings_list is not None else {}
 
-                tmp_name = path + "/" + item.get("Name", "")
-                first_slash_idx = tmp_name.find("/")
-                name = tmp_name[first_slash_idx + 1 :]
-                image_info = ImageInfo(
-                    subfile_path=path + "/",
-                    name=name,
-                    dim_sizes=dim_sizes,
-                    dim_byte_incs=dim_byte_incs,
-                    dim_scales=dim_scales,
-                    channels=n_channels,
-                    chan_byte_incs=chan_byte_incs,
-                    chan_bit_depths=chan_bit_depths,
-                    mosaic_positions=tile_list,
-                    settings=settings,
-                )
+                    tmp_name = path + "/" + item.get("Name", "")
+                    first_slash_idx = tmp_name.find("/")
+                    name = tmp_name[first_slash_idx + 1 :]
+                    image_info = ImageInfo(
+                        subfile_path=path + "/",
+                        name=name,
+                        dim_sizes=dim_sizes,
+                        dim_byte_incs=dim_byte_incs,
+                        dim_scales=dim_scales,
+                        channels=n_channels,
+                        chan_byte_incs=chan_byte_incs,
+                        chan_bit_depths=chan_bit_depths,
+                        mosaic_positions=tile_list,
+                        settings=settings,
+                    )
 
-                return_list.append(image_info)
+                    return_list.append(image_info)
+                else:
+                    return_list.append(False)
 
             # An image can have sub_children, it is not mutually exclusive
             if has_sub_children:
@@ -770,12 +753,12 @@ class LifFile:
         if isinstance(filename, (str, bytes, os.PathLike)):
             f.close()
 
-        self.image_list = self._recursive_image_find(self.xml_root)
+        tmp_image_list = self._recursive_image_find(self.xml_root)
 
         # If the image is truncated we need to manually add the offsets because
         # the LIF magic bytes aren't present to guide the location.
         if truncated:
-            num_truncated = len(self.image_list) - len(self.offsets)
+            num_truncated = len(tmp_image_list) - len(self.offsets)
             for _ in range(num_truncated):
                 # In the special case of a truncation,
                 # append an offset with length zero.
@@ -783,10 +766,11 @@ class LifFile:
                 self.offsets.append((truncation_begin, 0))
 
         # Fix for new LASX version
-        if len(self.offsets) - len(self.image_list) > 0:
-            is_image_bool_list = self._recursive_memblock_is_image(self.xml_root)
-            if False in is_image_bool_list:
-                self.offsets = list(compress(self.offsets, is_image_bool_list))
+        num_images = sum(1 if x else 0 for x in tmp_image_list)
+        if len(self.offsets) > num_images and False in tmp_image_list:
+            self.offsets = list(compress(self.offsets, tmp_image_list))
+
+        self.image_list = [x for x in tmp_image_list if x]
 
         if len(self.image_list) != len(self.offsets) and not truncated:
             msg = (

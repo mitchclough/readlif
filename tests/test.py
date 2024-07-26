@@ -8,7 +8,7 @@ import requests
 from PIL import Image
 
 from readlif.reader import Dims, LifFile
-from readlif.utilities import get_xml
+from readlif.utils import get_xml
 
 # Todo: Test a truncated image
 

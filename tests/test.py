@@ -195,7 +195,7 @@ class TestReadMethods(unittest.TestCase):
             os.path.join(TEST_DIR, "LeicaLASX_wavelength-sweep_example.lif")
         ).get_image(0)
         test = obj.get_plane(
-            display_dims=(Dims._fields.index("x"), Dims._fields.index("wl_em")),
+            display_dims=("X", "Wl_Em"),
             c=0,
             requested_dims=Dims.make_int(y=32),
         )

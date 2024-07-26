@@ -211,16 +211,16 @@ class LifImage:
 
         self.image_info = image_info
 
-        display_dims: list[int] = []
+        display_dims: list[str] = []
         n_dims = 0
         for i, d in enumerate(self.image_info.dim_sizes):
             if d > 0:
-                display_dims.append(i)
+                display_dims.append(Dims._fields[i])
                 n_dims += 1
 
             if n_dims >= 2:
                 break
-        self.display_dims: tuple[int, int] = (display_dims[0], display_dims[1])
+        self.display_dims: tuple[str, str] = (display_dims[0], display_dims[1])
 
         dim_byte_incs_list = [b for b in self.image_info.dim_byte_incs if b >= 0]
         if min(self.image_info.chan_byte_incs) == 0:
@@ -236,7 +236,7 @@ class LifImage:
 
     def get_plane(
         self,
-        display_dims: tuple[int, int] | None = None,
+        display_dims: tuple[str, str] | None = None,
         c: int = 0,
         requested_dims: Dims[int] | None = None,
     ) -> Image.Image:
@@ -247,8 +247,8 @@ class LifImage:
         will fail in that case.
 
         Args:
-            display_dims: Two value tuple (0, 1) specifying the two dimension plane to
-                return. This will default to the first two dimensions in the LifFile,
+            display_dims: Two value tuple ("X", "Y") specifying the two dimension plane
+                to return. This will default to the first two dimensions in the LifFile,
                 specified by LifImage.display_dims
             c: channel
             requested_dims: Object containing the dimension indexes to return.
@@ -298,17 +298,21 @@ class LifImage:
         image.seek(self.offsets[0])
         data = b""
 
-        max_off_x = (
-            self.image_info.dim_byte_incs[display_dims[0]]
-            * self.image_info.dim_sizes[display_dims[0]]
+        plane_dims = (
+            Dims._fields.index(display_dims[0].lower()),
+            Dims._fields.index(display_dims[1].lower()),
         )
-        increment_x = self.image_info.dim_byte_incs[display_dims[0]]
+        max_off_x = (
+            self.image_info.dim_byte_incs[plane_dims[0]]
+            * self.image_info.dim_sizes[plane_dims[0]]
+        )
+        increment_x = self.image_info.dim_byte_incs[plane_dims[0]]
         display_x = range(0, max_off_x, increment_x)
         max_off_y = (
-            self.image_info.dim_byte_incs[display_dims[1]]
-            * self.image_info.dim_sizes[display_dims[1]]
+            self.image_info.dim_byte_incs[plane_dims[1]]
+            * self.image_info.dim_sizes[plane_dims[1]]
         )
-        increment_y = self.image_info.dim_byte_incs[display_dims[1]]
+        increment_y = self.image_info.dim_byte_incs[plane_dims[1]]
         display_y = range(0, max_off_y, increment_y)
 
         # go to starting position for the channel and requested_dims based on the bytes
@@ -318,21 +322,21 @@ class LifImage:
             start_pos += self.image_info.dim_byte_incs[i] * d
         start_pos += self.image_info.chan_byte_incs[c]
 
-        # Speedup for the common case where the display_dims are the first two dims
+        # Speedup for the common case where the plane_dims are the first two dims
         #  i.e. reading the number of image pixels times the number of bytes per pixel
         # gives us the correct data
-        contains_bpp = self.image_info.dim_byte_incs[display_dims[0]] == self.bpp
+        contains_bpp = self.image_info.dim_byte_incs[plane_dims[0]] == self.bpp
         contains_bpp_times_other = (
-            self.image_info.dim_byte_incs[display_dims[0]]
-            == self.bpp * self.image_info.dim_byte_incs[display_dims[1]]
+            self.image_info.dim_byte_incs[plane_dims[0]]
+            == self.bpp * self.image_info.dim_byte_incs[plane_dims[1]]
         )
         # Quickest case where we can just read bpp * nx * ny bytes from the file and get
         # our image
         if contains_bpp and contains_bpp_times_other:
             # Define the size of the plane to return
             read_len = (
-                self.image_info.dim_sizes[display_dims[0]]
-                * self.image_info.dim_sizes[display_dims[1]]
+                self.image_info.dim_sizes[plane_dims[0]]
+                * self.image_info.dim_sizes[plane_dims[1]]
                 * self.bpp
             )
             if self.offsets[1] == 0:
@@ -343,7 +347,7 @@ class LifImage:
         # Quicker case where we can't read the whole image at once but can read in one
         # line at a time
         elif contains_bpp:
-            read_len = self.image_info.dim_sizes[display_dims[0]] * self.bpp
+            read_len = self.image_info.dim_sizes[plane_dims[0]] * self.bpp
 
             for pos in display_y:
                 px_pos = start_pos + pos
@@ -352,7 +356,7 @@ class LifImage:
                 else:
                     image.seek(self.offsets[0] + px_pos)
                     data = data + image.read(read_len)
-        # Handle the less common case, where the display_dims are arbitrary
+        # Handle the less common case, where the plane_dims are arbitrary
         else:
             for pos_y in display_y:
                 for pos_x in display_x:
@@ -378,8 +382,8 @@ class LifImage:
             return Image.frombytes(
                 "L",
                 (
-                    self.image_info.dim_sizes[display_dims[0]],
-                    self.image_info.dim_sizes[display_dims[1]],
+                    self.image_info.dim_sizes[plane_dims[0]],
+                    self.image_info.dim_sizes[plane_dims[1]],
                 ),
                 data,
             )
@@ -388,8 +392,8 @@ class LifImage:
             return Image.frombytes(
                 "I;16",
                 (
-                    self.image_info.dim_sizes[display_dims[0]],
-                    self.image_info.dim_sizes[display_dims[1]],
+                    self.image_info.dim_sizes[plane_dims[0]],
+                    self.image_info.dim_sizes[plane_dims[1]],
                 ),
                 data,
             )
@@ -410,7 +414,7 @@ class LifImage:
         Returns:
             Pillow Image object
         """
-        if self.display_dims != (0, 1):
+        if self.display_dims != ("x", "y"):
             msg = (
                 "Atypical imaging experiment, please use "
                 "get_plane() instead of get_frame()"
@@ -434,7 +438,7 @@ class LifImage:
             raise ValueError(msg)
 
         return self.get_plane(
-            display_dims=(0, 1), c=c, requested_dims=Dims.make_int(z=z, t=t, m=m)
+            display_dims=("X", "Y"), c=c, requested_dims=Dims.make_int(z=z, t=t, m=m)
         )
 
     def get_iter_t(

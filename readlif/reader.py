@@ -235,9 +235,6 @@ class LifImage:
         """
         Gets the specified frame from image.
 
-        Known issue: LASX Navigator saves channel as the second channel, this reader
-        will fail in that case.
-
         Args:
             display_dims: Two value tuple ("X", "Y") specifying the two dimension plane
                 to return. This will default to the first two dimensions in the LifFile,

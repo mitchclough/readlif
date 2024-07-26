@@ -265,10 +265,6 @@ class LifImage:
             msg = "display_dims must be a two value tuple"
             raise ValueError(msg)
 
-        if display_dims != self.display_dims:
-            msg = "Arbitrary dimensions are not yet supported"
-            raise NotImplementedError(msg)
-
         if c + 1 > self.image_info.channels:
             msg = (
                 f"Requested Channel {c} but image only has {self.image_info.channels} "

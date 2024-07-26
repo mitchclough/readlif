@@ -190,11 +190,16 @@ class TestReadMethods(unittest.TestCase):
         self.assertEqual(test2.tobytes(), ref2.tobytes())
 
     def test_arbitrary_plane_on_xzt_img(self) -> None:
+        ref = Image.open(os.path.join(TEST_DIR, "tiff", "xem_y32.tif"))
         obj = LifFile(
             os.path.join(TEST_DIR, "LeicaLASX_wavelength-sweep_example.lif")
         ).get_image(0)
-        with self.assertRaises(NotImplementedError):
-            obj.get_plane(display_dims=(0, 4), c=0, requested_dims=Dims.make_int(y=32))
+        test = obj.get_plane(
+            display_dims=(Dims._fields.index("x"), Dims._fields.index("wl_em")),
+            c=0,
+            requested_dims=Dims.make_int(y=32),
+        )
+        self.assertEqual(test.tobytes(), ref.tobytes())
 
     def test_new_lasx(self) -> None:
         obj = LifFile(os.path.join(TEST_DIR, "new_lasx.lif"))

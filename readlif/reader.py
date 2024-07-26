@@ -35,13 +35,13 @@ class Dims(NamedTuple, Generic[T]):
     y: T
     """the value of interest for the y dimension"""
     z: T
-    """the value of interest forthe z dimension"""
+    """the value of interest for the z dimension"""
     t: T
     """the value of interest for the t dimension"""
     wl_em: T
     """the value of interest for the emission wavelength dimension"""
     wl_ex: T
-    """the value of interest for excitation wavelength dimension"""
+    """the value of interest for the excitation wavelength dimension"""
     m: T
     """the value of interest for the mosaic tile dimension"""
 

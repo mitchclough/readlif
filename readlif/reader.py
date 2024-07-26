@@ -180,7 +180,6 @@ class LifImage:
             needed to read the image from the file.
         display_dims: The first two dimensions of the lif file. This is used to decide
             what dimensions are returned in a 2D plane.
-        bpp: Bytes per pixel in the image data.
     """
 
     def __init__(
@@ -213,15 +212,6 @@ class LifImage:
             if n_dims >= 2:
                 break
         self.display_dims: tuple[str, str] = (display_dims[0], display_dims[1])
-
-        dim_byte_incs_list = [b for b in self.image_info.dim_byte_incs if b >= 0]
-        if min(self.image_info.chan_byte_incs) == 0:
-            self.bpp = min(dim_byte_incs_list)
-        elif min(dim_byte_incs_list) == 0:
-            self.bpp = min(self.image_info.chan_byte_incs)
-        else:
-            msg = "cannot determine number of bytes per pixel"
-            raise ValueError(msg)
 
     def __repr__(self) -> str:
         return repr(f"LifImage object with dimensions: {self.image_info.dim_sizes}")
@@ -311,13 +301,22 @@ class LifImage:
             start_pos += self.image_info.dim_byte_incs[i] * d
         start_pos += self.image_info.chan_byte_incs[c]
 
+        # Try to figure out the number of bytes per pixel in the data
+        bpp = min(b for b in self.image_info.dim_byte_incs if b >= 0)
+        if bpp == 0:
+            bpp = min(self.image_info.chan_byte_incs)
+
+        if bpp == 0:
+            msg = "cannot determine number of bytes per pixel"
+            raise ValueError(msg)
+
         # Speedup for the common case where the plane_dims are the first two dims
         #  i.e. reading the number of image pixels times the number of bytes per pixel
         # gives us the correct data
-        contains_bpp = self.image_info.dim_byte_incs[plane_dims[0]] == self.bpp
+        contains_bpp = self.image_info.dim_byte_incs[plane_dims[0]] == bpp
         contains_bpp_times_other = (
             self.image_info.dim_byte_incs[plane_dims[0]]
-            == self.bpp * self.image_info.dim_byte_incs[plane_dims[1]]
+            == bpp * self.image_info.dim_byte_incs[plane_dims[1]]
         )
         # Quickest case where we can just read bpp * nx * ny bytes from the file and get
         # our image
@@ -326,7 +325,7 @@ class LifImage:
             read_len = (
                 self.image_info.dim_sizes[plane_dims[0]]
                 * self.image_info.dim_sizes[plane_dims[1]]
-                * self.bpp
+                * bpp
             )
             if self.offsets[1] == 0:
                 data = data + b"\00" * read_len
@@ -336,7 +335,7 @@ class LifImage:
         # Quicker case where we can't read the whole image at once but can read in one
         # line at a time
         elif contains_bpp:
-            read_len = self.image_info.dim_sizes[plane_dims[0]] * self.bpp
+            read_len = self.image_info.dim_sizes[plane_dims[0]] * bpp
 
             for pos in display_y:
                 px_pos = start_pos + pos
@@ -351,10 +350,10 @@ class LifImage:
                 for pos_x in display_x:
                     px_pos = start_pos + pos_x + pos_y
                     if self.offsets[1] == 0:
-                        data = data + b"\00" * self.bpp
+                        data = data + b"\00" * bpp
                     else:
                         image.seek(self.offsets[0] + px_pos)
-                        data = data + image.read(self.bpp)
+                        data = data + image.read(bpp)
 
         if isinstance(self.filename, (int, str, bytes, os.PathLike)):
             image.close()
@@ -367,7 +366,7 @@ class LifImage:
 
         # len(data) is the number of bytes (8-bit)
         # However, it is safer to let the lif file tell us the resolution
-        if self.image_info.chan_bit_depths[0] == 8:
+        if self.image_info.chan_bit_depths[c] == 8:
             return Image.frombytes(
                 "L",
                 (
@@ -377,7 +376,7 @@ class LifImage:
                 data,
             )
 
-        if self.image_info.chan_bit_depths[0] <= 16:
+        if self.image_info.chan_bit_depths[c] <= 16:
             return Image.frombytes(
                 "I;16",
                 (
@@ -668,7 +667,7 @@ class LifFile:
                         channels=n_channels,
                         chan_byte_incs=chan_byte_incs,
                         chan_bit_depths=chan_bit_depths,
-                        mosaic_positions=tile_list,
+                        mosaic_positions=tiles,
                         settings=settings,
                     )
 

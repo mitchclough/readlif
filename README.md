@@ -3,7 +3,7 @@
 
 readlif README file
 ===
-The readlif package was developed to be a fast, python only, reader for Leica Lif files. This is tested in Python 3.6 through 3.9.
+The readlif package was developed to be a fast, python only, reader for Leica Lif files. This is tested in Python 3.6 through 3.12.
 
 The basic premise is to read an image from a Lif file into a Pillow object. The only additional requirement for this package is Pillow>=7.2.0.
 
@@ -32,9 +32,6 @@ There is not support for FlipX, FlipY and SwapXY metadata. If you need this,
 please open an issue!
 
 Truncated images are returned as blank images.
-
-There is currently no support for returning arbitrary planes from `get_plane`
-by specifying `display_dims`. This is in progress.
 
 12- and 16-bit images
 ===

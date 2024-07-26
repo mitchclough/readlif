@@ -152,11 +152,11 @@ class ImageInfo(NamedTuple):
     """
     channels: int
     """number of channels in the image data"""
-    chan_byte_incs: list[int]
+    chan_byte_incs: tuple[int, ...]
     """number of bytes to increment in the raw data to increment the channel by 1"""
     chan_bit_depths: tuple[int, ...]
     """bit depth for each channel in the image data"""
-    mosaic_positions: list[Tile]
+    mosaic_positions: tuple[Tile, ...]
     """
     If the image is a mosaic (tiled), this contains a list of Tile objects which
     contains the field and position values for the tile
@@ -624,7 +624,9 @@ class LifFile:
                     channel_list = item.findall(
                         "./Data/Image/ImageDescription/Channels/ChannelDescription"
                     )
-                    chan_byte_incs = [int(c.get("BytesInc", -1)) for c in channel_list]
+                    chan_byte_incs = tuple(
+                        int(c.get("BytesInc", -1)) for c in channel_list
+                    )
                     n_channels = int(len(channel_list))
                     # Iterate over each channel, get the resolution
                     chan_bit_depths = tuple(
@@ -632,17 +634,22 @@ class LifFile:
                     )
 
                     # Get the position data if the image is tiled
-                    tile_list: list[Tile] = []
                     if dim_sizes.m > 1:
-                        for tile in item.findall("./Data/Image/Attachment/Tile"):
-                            FieldX = int(tile.get("FieldX", 0))
-                            FieldY = int(tile.get("FieldY", 0))
-                            PosX = float(tile.get("PosX", 0))
-                            PosY = float(tile.get("PosY", 0))
-
-                            tile_list.append(
-                                Tile(field=(FieldX, FieldY), pos=(PosX, PosY))
+                        tiles = tuple(
+                            Tile(
+                                field=(
+                                    int(tile.get("FieldX", 0)),
+                                    int(tile.get("FieldY", 0)),
+                                ),
+                                pos=(
+                                    float(tile.get("PosX", 0)),
+                                    float(tile.get("PosY", 0)),
+                                ),
                             )
+                            for tile in item.findall("./Data/Image/Attachment/Tile")
+                        )
+                    else:
+                        tiles = ()
 
                     settings_list = item.find(
                         "./Data/Image/Attachment/ATLConfocalSettingDefinition"

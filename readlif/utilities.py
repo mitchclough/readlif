@@ -11,8 +11,6 @@ def get_xml(filename: FileDescriptorOrPath) -> ET.Element:
 
     This is useful for debugging.
 
-    Some private functions are used from readlif.reader.
-
     Args:
         filename (FileDescriptorOrPath): what file to open?
     """

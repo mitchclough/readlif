@@ -6,7 +6,7 @@ import warnings
 import xml.etree.ElementTree as ET
 from collections.abc import Generator
 from itertools import compress
-from typing import Any, NamedTuple, TypeAlias
+from typing import Any, Generic, NamedTuple, TypeAlias, TypeVar
 
 from PIL import Image
 
@@ -22,13 +22,158 @@ from ._helpers import (
 
 FileDescriptorOrPathOrReader: TypeAlias = FileDescriptorOrPath | io.BufferedReader
 
+T = TypeVar("T", int, float, str)
 
-class Dims(NamedTuple):
-    x: int
-    y: int
-    z: int
-    t: int
-    m: int
+
+class Dims(NamedTuple, Generic[T]):
+    """
+    Class with integer values for all of the possible dimensions from a lif file.
+    """
+
+    x: T
+    """the value of interest for the x dimension"""
+    y: T
+    """the value of interest for the y dimension"""
+    z: T
+    """the value of interest forthe z dimension"""
+    t: T
+    """the value of interest for the t dimension"""
+    wl_em: T
+    """the value of interest for the emission wavelength dimension"""
+    wl_ex: T
+    """the value of interest for excitation wavelength dimension"""
+    m: T
+    """the value of interest for the mosaic tile dimension"""
+
+    @staticmethod
+    def make_int(
+        x: int = 0,
+        y: int = 0,
+        z: int = 0,
+        t: int = 0,
+        wl_em: int = 0,
+        wl_ex: int = 0,
+        m: int = 0,
+    ) -> Dims[int]:
+        """
+        Factory function to create a Dims[int] instance. Allows to only specify
+        dimensions of interest and leave the others to a default value.
+
+        Args:
+            x: value for the X dimension
+            y: value for the Y dimension
+            z: value for the Z dimension
+            t: value for the T dimension
+            wl_em: value for the Wl_Em dimension
+            wl_ex: value for the Wl_Ex dimension
+            m: value for the M dimension
+        """
+        return Dims(x=x, y=y, z=z, t=t, wl_em=wl_em, wl_ex=wl_ex, m=m)
+
+    @staticmethod
+    def make_float(
+        x: float = 0.0,
+        y: float = 0.0,
+        z: float = 0.0,
+        t: float = 0.0,
+        wl_em: float = 0.0,
+        wl_ex: float = 0.0,
+        m: float = 0.0,
+    ) -> Dims[float]:
+        """
+        Factory function to create a Dims[float] instance. Allows to only specify
+        dimensions of interest and leave the others to a default value.
+
+        Args:
+            x: value for the X dimension
+            y: value for the Y dimension
+            z: value for the Z dimension
+            t: value for the T dimension
+            wl_em: value for the Wl_Em dimension
+            wl_ex: value for the Wl_Ex dimension
+            m: value for the M dimension
+        """
+        return Dims(x=x, y=y, z=z, t=t, wl_em=wl_em, wl_ex=wl_ex, m=m)
+
+    @staticmethod
+    def make_str(
+        x: str = "",
+        y: str = "",
+        z: str = "",
+        t: str = "",
+        wl_em: str = "",
+        wl_ex: str = "",
+        m: str = "",
+    ) -> Dims[str]:
+        """
+        Factory function to create a Dims[str] instance. Allows to only specify
+        dimensions of interest and leave the others to a default value.
+
+        Args:
+            x: value for the X dimension
+            y: value for the Y dimension
+            z: value for the Z dimension
+            t: value for the T dimension
+            wl_em: value for the Wl_Em dimension
+            wl_ex: value for the Wl_Ex dimension
+            m: value for the M dimension
+        """
+        return Dims(x=x, y=y, z=z, t=t, wl_em=wl_em, wl_ex=wl_ex, m=m)
+
+
+U = TypeVar("U", int, float)
+
+
+class Pos(NamedTuple, Generic[U]):
+    x: U
+    y: U
+
+
+class Tile(NamedTuple):
+    """
+    Class with positions for a mosaic tile.
+    """
+
+    field: Pos[int]
+    """(x, y) field index"""
+    pos: Pos[float]
+    """(x, y) tile position"""
+
+
+class ImageInfo(NamedTuple):
+    """
+    Class with metadata and info about the image dataset.
+    """
+
+    subfile_path: str
+    """path to the image in the lif file"""
+    name: str
+    """name of the image"""
+    dim_sizes: Dims[int]
+    """number of elements in each dimension for the image"""
+    dim_byte_incs: Dims[int]
+    """number of bytes to increment in the raw data to increment this dimension by 1"""
+    dim_scales: Dims[float]
+    """
+    scale of each dimension in SI units corresponding to the dimension
+    (e.g. px / m, frames / s)
+    """
+    channels: int
+    """number of channels in the image data"""
+    chan_byte_incs: list[int]
+    """number of bytes to increment in the raw data to increment the channel by 1"""
+    chan_bit_depths: tuple[int, ...]
+    """bit depth for each channel in the image data"""
+    mosaic_positions: list[Tile]
+    """
+    If the image is a mosaic (tiled), this contains a list of Tile objects which
+    contains the field and position values for the tile
+    """
+    settings: dict[str, str]
+    """
+    ATLConfocalSettingDefinition (if it exists), which contains values like
+    NumericalAperture and Magnification.
+    """
 
 
 class LifImage:
@@ -37,112 +182,63 @@ class LifImage:
     get_image or get_iter_image from a LifFile object.
 
     Attributes:
-        path (str): path / name of the image
-        dims (tuple): (x, y, z, t, m)
-        display_dims (tuple): The first two dimensions of the lif file.
-            This is used to decide what dimensions are returned in a 2D plane.
-        dims_n (dict): {0: length, 1: length, 2: length, n: length}
-
-            For atypical imaging experiments, i.e. those not simple photos
-            of XY frames, this attribute will be more useful than `dims`.
-            This attribute will hold a dictionary with the length of each
-            dimension, in the order it is referenced in the .lif file.
-
-            Currently, only some of the 10 possible dimensions are used / known:
-
-            - 1: x-axis
-
-            - 2: y-axis
-
-            - 3: z-axis
-
-            - 4: time
-
-            - 5: detection wavelength
-
-            - 6-8: Unknown
-
-            - 9: illumination wavelength
-
-            - 10: mosaic tile
-
-        name (str): image name
-        offsets (list): Byte position offsets for each image.
-        filename (str, bytes, os.PathLike, io.IOBase): The name of the LIF file
-            being read
-        channels (int): Number of channels in the image
-        nz (int): number of 'z' frames
-
-            Note, it is recommended to use `dims.z` instead. However, this will
-            be kept for compatibility.
-        nt (int): number of 't' frames
-
-            Note, it is recommended to use `dims.t` instead. However, this will
-            be kept for compatibility.
-        scale (tuple): (scale_x, scale_y, scale_z, scale_t).
-
-            Conversion factor: px/µm for x, y and z; images/frame for t. For
-            time, this is the duration for the entire image acquisition.
-        scale_n (dict): {1: scale_x, 2: scale_y, 3: scale_z, 4: scale_t}.
-
-            Conversion factor: px/µm for x, y and z; images/sec for t. Related
-            to `dims_n` above.
-        bit_depth (tuple): A tuple of ints that indicates the bit depth of
-            each channel in the image.
-        mosaic_position (list): If the image is a mosaic (tiled), this contains
-            a list of tuples with four values: `(FieldX, FieldY, PosX, PosY)`.
-            The length of this list is equal to the number of tiles.
-        settings (dict): ATLConfocalSettingDefinition (if it exists), which contains
-            values like NumericalAperture and Magnification.
-        info (dict): Direct access to data dict from LifFile, this is most
-            useful for debugging. These are values pulled from the Leica XML.
+        filename: The LIF file containing this image.
+        offsets: Byte position offsets for each image.
+        image_info: Class containing most of the information
+            needed to read the image from the file.
+        display_dims: The first two dimensions of the lif file. This is used to decide
+            what dimensions are returned in a 2D plane.
+        bpp: Bytes per pixel in the image data.
     """
 
     def __init__(
         self,
-        image_info: dict[str, Any],
-        offsets: tuple[int, int],
         filename: FileDescriptorOrPathOrReader,
+        offsets: tuple[int, int],
+        image_info: ImageInfo,
     ):
-        self.dims: Dims = image_info["dims"]
-        self.display_dims: tuple[int, int] = image_info["display_dims"]
-        self.dims_n: dict[int, int] = image_info["dims_n"]
-        self.scale_n: dict[int, float | None] = image_info["scale_n"]
-        self.path: str = image_info["path"]
-        self.offsets: tuple[int, int] = offsets
-        self.info: dict[str, Any] = image_info
-        self.filename: FileDescriptorOrPathOrReader = filename
-        self.name: str = image_info["name"]
-        self.channels: int = image_info["channels"]
-        self.nz: int = int(image_info["dims"].z)
-        self.nt: int = int(image_info["dims"].t)
-        self.scale: tuple[int, int, int, int] = image_info["scale"]
-        self.bit_depth: tuple[int, ...] = image_info["bit_depth"]
-        self.mosaic_position: list[tuple[int, int, float, float]] = image_info[
-            "mosaic_position"
-        ]
-        self.n_mosaic: int = self.dims.m
-        self.settings: dict[str, str] = image_info["settings"]
-        self.dims_bytes: dict[int, int] = image_info["dims_bytes"]
-        self.channel_bytes: list[int] = image_info["channels_bytes"]
+        """
+        Initializes the LifImage instance.
 
-        dims_bytes_list = list(image_info["dims_bytes"].values())
-        if min(self.channel_bytes) == 0:
-            self.bpp = min(dims_bytes_list)
-        elif min(dims_bytes_list) == 0:
-            self.bpp = min(self.channel_bytes)
+        Args:
+            filename: The LIF file containing this image.
+            offsets: Byte position offsets for each image.
+            image_info: Class containing most of the information needed to read the
+                image from the file.
+        """
+        self.filename: FileDescriptorOrPathOrReader = filename
+        self.offsets: tuple[int, int] = offsets
+
+        self.image_info = image_info
+
+        display_dims: list[int] = []
+        n_dims = 0
+        for i, d in enumerate(self.image_info.dim_sizes):
+            if d > 0:
+                display_dims.append(i)
+                n_dims += 1
+
+            if n_dims >= 2:
+                break
+        self.display_dims: tuple[int, int] = (display_dims[0], display_dims[1])
+
+        dim_byte_incs_list = [b for b in self.image_info.dim_byte_incs if b >= 0]
+        if min(self.image_info.chan_byte_incs) == 0:
+            self.bpp = min(dim_byte_incs_list)
+        elif min(dim_byte_incs_list) == 0:
+            self.bpp = min(self.image_info.chan_byte_incs)
         else:
             msg = "cannot determine number of bytes per pixel"
             raise ValueError(msg)
 
     def __repr__(self) -> str:
-        return repr("LifImage object with dimensions: " + str(self.dims))
+        return repr(f"LifImage object with dimensions: {self.image_info.dim_sizes}")
 
     def get_plane(
         self,
         display_dims: tuple[int, int] | None = None,
         c: int = 0,
-        requested_dims: dict[int, int] | None = None,
+        requested_dims: Dims[int] | None = None,
     ) -> Image.Image:
         """
         Gets the specified frame from image.
@@ -151,52 +247,44 @@ class LifImage:
         will fail in that case.
 
         Args:
-            display_dims (tuple): Two value tuple (1, 2) specifying the
-                two dimension plane to return. This will default to the first
-                two dimensions in the LifFile, specified by LifFile.display_dims
-            c (int): channel
-            requested_dims (dict): Dictionary indicating the item to be returned,
-                as described by a numerical dictionary, ex: {3: 0, 4: 1}
+            display_dims: Two value tuple (0, 1) specifying the two dimension plane to
+                return. This will default to the first two dimensions in the LifFile,
+                specified by LifImage.display_dims
+            c: channel
+            requested_dims: Object containing the dimension indexes to return.
 
         Returns:
             Pillow Image object
         """
         if requested_dims is None:
-            requested_dims = {}
+            requested_dims = Dims.make_int()
 
         if display_dims is None:
             display_dims = self.display_dims
-        elif type(display_dims) is not tuple or len(display_dims) != 2:
+        elif not isinstance(display_dims, tuple) or len(display_dims) != 2:
             msg = "display_dims must be a two value tuple"
             raise ValueError(msg)
-
-        if requested_dims.keys() in display_dims:
-            warnings.warn(
-                "One or more of the display_dims is in the "
-                "requested_dims dictionary. Currently this has no "
-                "effect. All data from the display_dims will be "
-                "returned.",
-                stacklevel=2,
-            )
 
         if display_dims != self.display_dims:
             msg = "Arbitrary dimensions are not yet supported"
             raise NotImplementedError(msg)
 
-        # Set all requested dims to 0:
-        for i in range(1, 11):
-            requested_dims[i] = int(requested_dims.get(i, 0))
-
-        if c + 1 > self.channels:
-            msg = f"Requested Channel {c} but image only has {self.channels} channels"
+        if c + 1 > self.image_info.channels:
+            msg = (
+                f"Requested Channel {c} but image only has {self.image_info.channels} "
+                "channels"
+            )
             raise ValueError(msg)
 
         # Check if any of the dims exceeds what is in the image
-        for key in requested_dims:
-            if requested_dims[key] != 0 and (
-                self.dims_n.get(key) is None or requested_dims[key] > self.dims_n[key]
+        for i, d in enumerate(requested_dims):
+            if d != 0 and (
+                self.image_info.dim_sizes[i] == 0 or d > self.image_info.dim_sizes[i]
             ):
-                msg = f"Requested frame in dimension {key} doesn't exist"
+                msg = (
+                    f"Requested frame in dimension {requested_dims._fields[i]} "
+                    "doesn't exist"
+                )
                 raise ValueError(msg)
 
         if isinstance(self.filename, (int, str, bytes, os.PathLike)):
@@ -214,34 +302,42 @@ class LifImage:
         image.seek(self.offsets[0])
         data = b""
 
-        max_off_x = self.dims_bytes[display_dims[0]] * self.dims_n[display_dims[0]]
-        increment_x = self.dims_bytes[display_dims[0]]
+        max_off_x = (
+            self.image_info.dim_byte_incs[display_dims[0]]
+            * self.image_info.dim_sizes[display_dims[0]]
+        )
+        increment_x = self.image_info.dim_byte_incs[display_dims[0]]
         display_x = range(0, max_off_x, increment_x)
-        max_off_y = self.dims_bytes[display_dims[1]] * self.dims_n[display_dims[1]]
-        increment_y = self.dims_bytes[display_dims[1]]
+        max_off_y = (
+            self.image_info.dim_byte_incs[display_dims[1]]
+            * self.image_info.dim_sizes[display_dims[1]]
+        )
+        increment_y = self.image_info.dim_byte_incs[display_dims[1]]
         display_y = range(0, max_off_y, increment_y)
 
         # go to starting position for the channel and requested_dims based on the bytes
         # offset from lif metadata
         start_pos = 0
-        for key in requested_dims:
-            start_pos += self.dims_bytes.get(key, 0) * requested_dims[key]
-        start_pos += self.channel_bytes[c]
+        for i, d in enumerate(requested_dims):
+            start_pos += self.image_info.dim_byte_incs[i] * d
+        start_pos += self.image_info.chan_byte_incs[c]
 
         # Speedup for the common case where the display_dims are the first two dims
         #  i.e. reading the number of image pixels times the number of bytes per pixel
         # gives us the correct data
-        contains_bpp = self.dims_bytes[display_dims[0]] == self.bpp
+        contains_bpp = self.image_info.dim_byte_incs[display_dims[0]] == self.bpp
         contains_bpp_times_other = (
-            self.dims_bytes[display_dims[0]]
-            == self.bpp * self.dims_bytes[display_dims[1]]
+            self.image_info.dim_byte_incs[display_dims[0]]
+            == self.bpp * self.image_info.dim_byte_incs[display_dims[1]]
         )
         # Quickest case where we can just read bpp * nx * ny bytes from the file and get
         # our image
         if contains_bpp and contains_bpp_times_other:
             # Define the size of the plane to return
             read_len = (
-                self.dims_n[display_dims[0]] * self.dims_n[display_dims[1]] * self.bpp
+                self.image_info.dim_sizes[display_dims[0]]
+                * self.image_info.dim_sizes[display_dims[1]]
+                * self.bpp
             )
             if self.offsets[1] == 0:
                 data = data + b"\00" * read_len
@@ -251,7 +347,7 @@ class LifImage:
         # Quicker case where we can't read the whole image at once but can read in one
         # line at a time
         elif contains_bpp:
-            read_len = self.dims_n[display_dims[0]] * self.bpp
+            read_len = self.image_info.dim_sizes[display_dims[0]] * self.bpp
 
             for pos in display_y:
                 px_pos = start_pos + pos
@@ -282,15 +378,23 @@ class LifImage:
 
         # len(data) is the number of bytes (8-bit)
         # However, it is safer to let the lif file tell us the resolution
-        if self.bit_depth[0] == 8:
+        if self.image_info.chan_bit_depths[0] == 8:
             return Image.frombytes(
-                "L", (self.dims_n[display_dims[0]], self.dims_n[display_dims[1]]), data
+                "L",
+                (
+                    self.image_info.dim_sizes[display_dims[0]],
+                    self.image_info.dim_sizes[display_dims[1]],
+                ),
+                data,
             )
 
-        if self.bit_depth[0] <= 16:
+        if self.image_info.chan_bit_depths[0] <= 16:
             return Image.frombytes(
                 "I;16",
-                (self.dims_n[display_dims[0]], self.dims_n[display_dims[1]]),
+                (
+                    self.image_info.dim_sizes[display_dims[0]],
+                    self.image_info.dim_sizes[display_dims[1]],
+                ),
                 data,
             )
 
@@ -302,39 +406,39 @@ class LifImage:
         Gets the specified frame (z, t, c, m) from image.
 
         Args:
-            z (int): z position
-            t (int): time point
-            c (int): channel
-            m (int): mosaic image
+            z: z position
+            t: time point
+            c: channel
+            m: mosaic image
 
         Returns:
             Pillow Image object
         """
-        if self.display_dims != (1, 2):
+        if self.display_dims != (0, 1):
             msg = (
                 "Atypical imaging experiment, please use "
                 "get_plane() instead of get_frame()"
             )
             raise ValueError(msg)
 
-        if z >= self.nz:
+        if z != 0 and z >= self.image_info.dim_sizes.z:
             msg = "Requested Z frame doesn't exist."
             raise ValueError(msg)
 
-        if t >= self.nt:
+        if t != 0 and t >= self.image_info.dim_sizes.t:
             msg = "Requested T frame doesn't exist."
             raise ValueError(msg)
 
-        if c >= self.channels:
+        if c >= self.image_info.channels:
             msg = "Requested channel doesn't exist."
             raise ValueError(msg)
 
-        if m >= self.n_mosaic:
+        if m != 0 and m >= self.image_info.dim_sizes.m:
             msg = "Requested mosaic image doesn't exist."
             raise ValueError(msg)
 
         return self.get_plane(
-            display_dims=(1, 2), c=c, requested_dims={3: z, 4: t, 10: m}
+            display_dims=(0, 1), c=c, requested_dims=Dims.make_int(z=z, t=t, m=m)
         )
 
     def get_iter_t(
@@ -344,14 +448,14 @@ class LifImage:
         Returns an iterator over time t at position z and channel c.
 
         Args:
-            z (int): z position
-            c (int): channel
-            m (int): mosaic image
+            z: z position
+            c: channel
+            m: mosaic image
 
         Returns:
             Iterator of Pillow Image objects
         """
-        for t in range(self.nt):
+        for t in range(self.image_info.dim_sizes.t):
             yield self.get_frame(z=z, t=t, c=c, m=m)
 
     def get_iter_c(
@@ -361,14 +465,14 @@ class LifImage:
         Returns an iterator over the channels at time t and position z.
 
         Args:
-            z (int): z position
-            t (int): time point
-            m (int): mosaic image
+            z: z position
+            t: time point
+            m: mosaic image
 
         Returns:
             Iterator of Pillow Image objects
         """
-        for c in range(self.channels):
+        for c in range(self.image_info.channels):
             yield self.get_frame(z=z, t=t, c=c, m=m)
 
     def get_iter_z(
@@ -378,14 +482,14 @@ class LifImage:
         Returns an iterator over the z series of time t and channel c.
 
         Args:
-            t (int): time point
-            c (int): channel
-            m (int): mosaic image
+            t: time point
+            c: channel
+            m: mosaic image
 
         Returns:
             Iterator of Pillow Image objects
         """
-        for z in range(self.nz):
+        for z in range(self.image_info.dim_sizes.z):
             yield self.get_frame(z=z, t=t, c=c, m=m)
 
     def get_iter_m(
@@ -395,14 +499,14 @@ class LifImage:
         Returns an iterator over the z series of time t and channel c.
 
         Args:
-            t (int): time point
-            c (int): channel
-            z (int): z position
+            t: time point
+            c: channel
+            z: z position
 
         Returns:
             Iterator of Pillow Image objects
         """
-        for m in range(self.n_mosaic):
+        for m in range(self.image_info.dim_sizes.m):
             yield self.get_frame(z=z, t=t, c=c, m=m)
 
 
@@ -415,12 +519,12 @@ class LifFile:
     that is here: https://github.com/openmicroscopy/bioformats/blob/master/components/formats-gpl/src/loci/formats/in/LIFReader.java
 
     Attributes:
-        xml_header (string): The LIF xml header with tons of data
-        xml_root (ElementTree): ElementTree XML representation
-        offsets (list): Byte positions of the files
-        num_images (int): Number of images
-        image_list (dict): Has the keys: path, folder_name, folder_uuid,
-            name, image_id, frames
+        filename: File descriptor, path, or buffered reader to the lif file.
+        xml_header: The LIF xml header with tons of data
+        xml_root: ElementTree XML representation
+        offsets: Byte positions of the files
+        num_images: Number of images.
+        image_list: List of readlif.reader.ImageInfo objects with one for each image.
 
     Example:
         >>> from readlif.reader import LifFile
@@ -466,9 +570,9 @@ class LifFile:
     def _recursive_image_find(
         self,
         tree: ET.Element,
-        return_list: list[dict[str, Any]] | None = None,
+        return_list: list[ImageInfo] | None = None,
         path: str = "",
-    ) -> list[dict[str, Any]]:
+    ) -> list[ImageInfo]:
         """Creates list of images by parsing the XML header recursively"""
 
         if return_list is None:
@@ -478,7 +582,7 @@ class LifFile:
         if len(children) < 1:  # Fix for 'first round'
             children = tree.findall("./Element")
         for item in children:
-            folder_name = item.attrib["Name"]
+            folder_name = item.get("Name", "")
             # Grab the .lif filename name on the first execution
             appended_path = folder_name if path == "" else path + "/" + folder_name
             # This finds empty folders
@@ -492,48 +596,18 @@ class LifFile:
                 # Find the dimensions, get them in order
                 dims = item.findall("./Data/Image/ImageDescription/" "Dimensions/")
 
-                # Get first two dims, if that fails, set X, Y
-                # Todo: Check a 1-d image
-                try:
-                    dim1 = int(dims[0].attrib["DimID"])
-                    dim2 = int(dims[1].attrib["DimID"])
-                except (AttributeError, IndexError):
-                    dim1 = 1
-                    dim2 = 2
-
-                dims_dict = {
-                    int(d.attrib["DimID"]): int(d.attrib["NumberOfElements"])
-                    for d in dims
-                }
-
-                dims_bytes = {
-                    int(d.attrib["DimID"]): int(d.attrib["BytesInc"]) for d in dims
-                }
-
-                # Get the scale from each image
-                scale_dict: dict[int, float | None] = {}
+                dims_dict: dict[int, int] = {}
+                dims_bytes: dict[int, int] = {}
+                dims_scale: dict[int, float] = {}
                 for d in dims:
-                    # Length is not always present, need a try-except
-                    dim_n = int(d.attrib["DimID"])
-                    try:
-                        len_n = float(d.attrib["Length"])
-
-                        # other conversion factor for times needed
-                        # returns scale in frames per second
-                        if dim_n == 4:
-                            scale_dict[dim_n] = (int(dims_dict[dim_n]) - 1) / float(
-                                len_n
-                            )
-                        # Convert from meters to micrometers
-                        else:
-                            scale_dict[dim_n] = (int(dims_dict[dim_n]) - 1) / (
-                                float(len_n) * 10**6
-                            )
-                    except (AttributeError, ZeroDivisionError):
-                        scale_dict[dim_n] = None
-
-                # This code block is to maintain compatibility with programs
-                # written before 0.5.0
+                    dim_id = int(d.get("DimID", 0))
+                    dims_dict[dim_id] = int(d.get("NumberOfElements", 0))
+                    dims_bytes[dim_id] = int(d.get("BytesInc", -1))
+                    dim_len = float(d.get("Length", 0))
+                    if dim_len > 0:
+                        dims_scale[dim_id] = (dims_dict[dim_id] - 1) / dim_len
+                    else:
+                        dims_scale[dim_id] = 0
 
                 # Known LIF dims:
                 # 1: x
@@ -546,64 +620,82 @@ class LifFile:
                 # 8: Unknown
                 # 9: illumination wavelength
                 # 10: Mosaic tile
+                dim_sizes = Dims.make_int(
+                    x=dims_dict.get(1, 0),
+                    y=dims_dict.get(2, 0),
+                    z=dims_dict.get(3, 0),
+                    t=dims_dict.get(4, 0),
+                    wl_em=dims_dict.get(5, 0),
+                    wl_ex=dims_dict.get(9, 0),
+                    m=dims_dict.get(10, 0),
+                )
 
-                # The default value needs to be 1, because even if a dimension
-                # is missing, it still has to exist. For example, an image that
-                # is an x-scan still has one y-dimension.
-                dim_x = dims_dict.get(1, 1)
-                dim_y = dims_dict.get(2, 1)
-                dim_z = dims_dict.get(3, 1)
-                dim_t = dims_dict.get(4, 1)
-                dim_m = dims_dict.get(10, 1)
+                dim_byte_incs = Dims.make_int(
+                    x=dims_bytes.get(1, -1),
+                    y=dims_bytes.get(2, -1),
+                    z=dims_bytes.get(3, -1),
+                    t=dims_bytes.get(4, -1),
+                    wl_em=dims_bytes.get(5, -1),
+                    wl_ex=dims_bytes.get(9, -1),
+                    m=dims_bytes.get(10, -1),
+                )
 
-                scale_x = scale_dict.get(1)
-                scale_y = scale_dict.get(2)
-                scale_z = scale_dict.get(3)
-                scale_t = scale_dict.get(4)
+                dim_scales = Dims.make_float(
+                    x=dims_scale.get(1, 0.0),
+                    y=dims_scale.get(2, 0.0),
+                    z=dims_scale.get(3, 0.0),
+                    t=dims_scale.get(4, 0.0),
+                    wl_em=dims_scale.get(5, 0.0),
+                    wl_ex=dims_scale.get(9, 0.0),
+                    m=dims_scale.get(10, 0.0),
+                )
 
                 # Determine number of channels
                 channel_list = item.findall(
                     "./Data/Image/ImageDescription/Channels/ChannelDescription"
                 )
-                channels_bytes = [int(c.attrib["BytesInc"]) for c in channel_list]
+                chan_byte_incs = [int(c.get("BytesInc", -1)) for c in channel_list]
                 n_channels = int(len(channel_list))
                 # Iterate over each channel, get the resolution
-                bit_depth = tuple([int(c.attrib["Resolution"]) for c in channel_list])
+                chan_bit_depths = tuple(
+                    int(c.get("Resolution", 0)) for c in channel_list
+                )
 
                 # Get the position data if the image is tiled
-                m_pos_list: list[tuple[int, int, float, float]] = []
-                if dim_m > 1:
+                tile_list: list[Tile] = []
+                if dim_sizes.m > 1:
                     for tile in item.findall("./Data/Image/Attachment/Tile"):
-                        FieldX = int(tile.attrib["FieldX"])
-                        FieldY = int(tile.attrib["FieldY"])
-                        PosX = float(tile.attrib["PosX"])
-                        PosY = float(tile.attrib["PosY"])
+                        FieldX = int(tile.get("FieldX", 0))
+                        FieldY = int(tile.get("FieldY", 0))
+                        PosX = float(tile.get("PosX", 0))
+                        PosY = float(tile.get("PosY", 0))
 
-                        m_pos_list.append((FieldX, FieldY, PosX, PosY))
+                        tile_list.append(
+                            Tile(field=Pos(FieldX, FieldY), pos=Pos(PosX, PosY))
+                        )
 
-                settings_list = item.findall(
+                settings_list = item.find(
                     "./Data/Image/Attachment/ATLConfocalSettingDefinition"
                 )
-                settings = settings_list[0].attrib if len(settings_list) > 0 else {}
+                settings = settings_list.attrib if settings_list is not None else {}
 
-                data_dict = {
-                    "dims": Dims(dim_x, dim_y, dim_z, dim_t, dim_m),
-                    "display_dims": (dim1, dim2),
-                    "dims_n": dims_dict,
-                    "scale_n": scale_dict,
-                    "path": path + "/",
-                    "name": "/".join((path + "/" + item.attrib["Name"]).split("/")[1:]),
-                    "channels": n_channels,
-                    "scale": (scale_x, scale_y, scale_z, scale_t),
-                    "bit_depth": bit_depth,
-                    "mosaic_position": m_pos_list,
-                    "settings": settings,
-                    "dims_bytes": dims_bytes,
-                    "channels_bytes": channels_bytes,
-                    # "metadata_xml": item
-                }
+                tmp_name = path + "/" + item.get("Name", "")
+                first_slash_idx = tmp_name.find("/")
+                name = tmp_name[first_slash_idx + 1 :]
+                image_info = ImageInfo(
+                    subfile_path=path + "/",
+                    name=name,
+                    dim_sizes=dim_sizes,
+                    dim_byte_incs=dim_byte_incs,
+                    dim_scales=dim_scales,
+                    channels=n_channels,
+                    chan_byte_incs=chan_byte_incs,
+                    chan_bit_depths=chan_bit_depths,
+                    mosaic_positions=tile_list,
+                    settings=settings,
+                )
 
-                return_list.append(data_dict)
+                return_list.append(image_info)
 
             # An image can have sub_children, it is not mutually exclusive
             if has_sub_children:
@@ -612,9 +704,15 @@ class LifFile:
         return return_list
 
     def __init__(self, filename: FileDescriptorOrPathOrReader):
+        """
+        Initialize a LifFile instance.
+
+        Args:
+            filename: File descriptor, path, or buffered reader to the lif file.
+        """
         self.filename = filename
 
-        if isinstance(filename, (str, bytes, os.PathLike)):
+        if isinstance(filename, (int, str, bytes, os.PathLike)):
             f = open(filename, "rb")  # noqa: SIM115
         elif isinstance(filename, io.BufferedReader):
             f = filename
@@ -726,7 +824,7 @@ class LifFile:
             raise ValueError(msg)
         offsets = self.offsets[img_n]
         image_info = self.image_list[img_n]
-        return LifImage(image_info, offsets, self.filename)
+        return LifImage(self.filename, offsets, image_info)
 
     def get_iter_image(self, img_n: int = 0) -> Generator[LifImage, Any, None]:
         """
@@ -739,4 +837,4 @@ class LifFile:
             Iterator of LifImage objects.
         """
         for i in range(img_n, len(self.image_list)):
-            yield LifImage(self.image_list[i], self.offsets[i], self.filename)
+            yield LifImage(self.filename, self.offsets[i], self.image_list[i])

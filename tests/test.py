@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 import requests
 from PIL import Image
 
-from readlif.reader import LifFile
+from readlif.reader import Dims, LifFile
 from readlif.utilities import get_xml
 
 # Todo: Test a truncated image
@@ -73,7 +73,7 @@ class TestReadMethods(unittest.TestCase):
             repr(obj),
             "'LifImage object with "
             "dimensions: "
-            "Dims(x=1024, y=1024, z=3, t=3, m=1)'",
+            "Dims(x=1024, y=1024, z=3, t=3, wl_em=0, wl_ex=0, m=0)'",
         )
 
         c_list = list(obj.get_iter_c())
@@ -111,11 +111,11 @@ class TestReadMethods(unittest.TestCase):
 
     def test_scale(self) -> None:
         obj = LifFile(os.path.join(TEST_DIR, "xyzt_test.lif")).get_image(0)
-        self.assertAlmostEqual(obj.scale[0], 9.8709062997224)
+        self.assertAlmostEqual(obj.image_info.dim_scales.x, 9870906.2997224)
 
     def test_depth(self) -> None:
         obj = LifFile(os.path.join(TEST_DIR, "xyzt_test.lif")).get_image(0)
-        self.assertEqual(obj.bit_depth[0], 8)
+        self.assertEqual(obj.image_info.chan_bit_depths[0], 8)
 
     def test_private_images_16bit(self) -> None:
         # These tests are for images that are not public.
@@ -129,7 +129,7 @@ class TestReadMethods(unittest.TestCase):
             # ImageJ makes big endian files for 16bit by default
             obj = LifFile(os.path.join(TEST_DIR, "private/16bit.lif")).get_image(1)
 
-            self.assertEqual(obj.bit_depth[0], 12)
+            self.assertEqual(obj.image_info.chan_bit_depths[0], 12)
 
             ref = Image.open("private/i1c0z2_16b.tif")
             test = obj.get_frame(z=2, c=0)
@@ -149,7 +149,7 @@ class TestReadMethods(unittest.TestCase):
             downloadPrivateFile("i0c1m2z0.tif", pwd)
 
             obj = LifFile("private/tile_002.lif").get_image(0)
-            self.assertEqual(obj.dims.m, 165)
+            self.assertEqual(obj.image_info.dim_sizes.m, 165)
 
             m_list = list(obj.get_iter_m())
             self.assertEqual(len(m_list), 165)
@@ -174,19 +174,19 @@ class TestReadMethods(unittest.TestCase):
             obj = LifFile(os.path.join(TEST_DIR, "xyzt_test.lif")).get_image(0)
             # 3: z
             # 4: t
-            test = obj.get_plane(c=c, requested_dims={3: z, 4: t})
+            test = obj.get_plane(c=c, requested_dims=Dims.make_int(z=z, t=t))
             self.assertEqual(test.tobytes(), ref.tobytes())
 
     def test_get_plane_on_xz_img(self) -> None:
         ref = Image.open(os.path.join(TEST_DIR, "tiff", "xz_c0_t0.tif"))
         obj = LifFile(os.path.join(TEST_DIR, "testdata_2channel_xz.lif")).get_image(0)
-        test = obj.get_plane(c=0, requested_dims={4: 0})
+        test = obj.get_plane(c=0, requested_dims=Dims.make_int())
         self.assertEqual(test.tobytes(), ref.tobytes())
 
         ref2 = Image.open(os.path.join(TEST_DIR, "tiff", "xz_c1_t8.tif"))
         # 3: z
         # 4: t
-        test2 = obj.get_plane(c=1, requested_dims={4: 8})
+        test2 = obj.get_plane(c=1, requested_dims=Dims.make_int(t=8))
         self.assertEqual(test2.tobytes(), ref2.tobytes())
 
     def test_arbitrary_plane_on_xzt_img(self) -> None:
@@ -194,7 +194,7 @@ class TestReadMethods(unittest.TestCase):
             os.path.join(TEST_DIR, "LeicaLASX_wavelength-sweep_example.lif")
         ).get_image(0)
         with self.assertRaises(NotImplementedError):
-            obj.get_plane(display_dims=(1, 5), c=0, requested_dims={2: 31})
+            obj.get_plane(display_dims=(0, 4), c=0, requested_dims=Dims.make_int(y=32))
 
     def test_new_lasx(self) -> None:
         obj = LifFile(os.path.join(TEST_DIR, "new_lasx.lif"))
@@ -202,7 +202,7 @@ class TestReadMethods(unittest.TestCase):
 
     def test_settings(self) -> None:
         obj = LifFile(os.path.join(TEST_DIR, "testdata_2channel_xz.lif")).get_image(0)
-        self.assertEqual(obj.settings["ObjectiveNumber"], "11506353")
+        self.assertEqual(obj.image_info.settings["ObjectiveNumber"], "11506353")
 
 
 if __name__ == "__main__":

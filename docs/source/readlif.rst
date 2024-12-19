@@ -8,7 +8,7 @@ Submodules
    :maxdepth: 4
 
    readlif.reader
-   readlif.utilities
+   readlif.utils
 
 Module contents
 ---------------
